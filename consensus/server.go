@@ -51,16 +51,16 @@ func RunDialClient(
 }
 
 // notPrimaryResponse builds the refusal a non-primary node receives for a sign
-// request. For non-sign requests (pubkey, ping) it returns (_, false) so they
-// always pass through.
-func notPrimaryResponse(req privvalproto.Message) (privvalproto.Message, bool) {
-	switch req.Sum.(type) {
+// request, along with the height the request is for. For non-sign requests
+// (pubkey, ping) it returns (_, _, false) so they always pass through.
+func notPrimaryResponse(req privvalproto.Message) (privvalproto.Message, int64, bool) {
+	switch r := req.Sum.(type) {
 	case *privvalproto.Message_SignVoteRequest:
-		return wrapMsg(&privvalproto.SignedVoteResponse{Error: remoteErr("not the primary signer")}), true
+		return wrapMsg(&privvalproto.SignedVoteResponse{Error: remoteErr("not the primary signer")}), r.SignVoteRequest.Vote.Height, true
 	case *privvalproto.Message_SignProposalRequest:
-		return wrapMsg(&privvalproto.SignedProposalResponse{Error: remoteErr("not the primary signer")}), true
+		return wrapMsg(&privvalproto.SignedProposalResponse{Error: remoteErr("not the primary signer")}), r.SignProposalRequest.Proposal.Height, true
 	default:
-		return privvalproto.Message{}, false
+		return privvalproto.Message{}, 0, false
 	}
 }
 
@@ -70,9 +70,9 @@ func notPrimaryResponse(req privvalproto.Message) (privvalproto.Message, bool) {
 // through unconditionally so the connection stays healthy.
 func gatedHandler(arbiter *PrimaryArbiter, id string, next privval.ValidationRequestHandlerFunc) privval.ValidationRequestHandlerFunc {
 	return func(pv types.PrivValidator, req privvalproto.Message, chainID string) (privvalproto.Message, error) {
-		refusal, isSign := notPrimaryResponse(req)
+		refusal, height, isSign := notPrimaryResponse(req)
 		if isSign {
-			if !arbiter.Acquire(id) {
+			if !arbiter.Acquire(id, height) {
 				return refusal, nil
 			}
 			// The elected primary just had a consensus vote/proposal signed, so it is the

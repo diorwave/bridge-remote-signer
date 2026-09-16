@@ -165,14 +165,14 @@ replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alp
 
 replace github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 
-// v1.82.1 is the minimum version fixing GO-2026-6061 (and GO-2026-4762, authorization
-// bypass via :path).
+// v1.82.1 is the minimum version fixing GO-2026-6061; it also carries the
+// GO-2026-4762 (authorization bypass via :path) fix that v1.79.3 was pinned for.
 replace google.golang.org/grpc => google.golang.org/grpc v1.82.1
 
 replace google.golang.org/protobuf => google.golang.org/protobuf v1.36.6
 
-// v0.55.0 is the minimum version fixing GO-2026-5026 (and GO-2026-4918, HTTP/2 infinite
-// loop).
+// v0.53.0 is the minimum version fixing GO-2026-4918 (HTTP/2 infinite loop).
+// v0.55.0 is the minimum version fixing GO-2026-5026.
 replace golang.org/x/net => golang.org/x/net v0.55.0
 
 replace golang.org/x/sys => golang.org/x/sys v0.33.0

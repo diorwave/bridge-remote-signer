@@ -38,6 +38,12 @@ type PrimaryArbiter struct {
 	primary string
 	lastReq time.Time
 
+	// maxHeight is the greatest height this arbiter has granted a sign request
+	// for. A preferred node is only allowed to fail back once it has caught up
+	// to it; otherwise it would reclaim the role while still behind and every
+	// request until it catches up is refused as a height regression.
+	maxHeight int64
+
 	now func() time.Time // overridable in tests
 }
 
@@ -86,7 +92,7 @@ func (a *PrimaryArbiter) outranks(id string) bool {
 // refreshes the idle timer); another id may take over when there is no primary
 // yet, when the current primary has been idle longer than the timeout, or when
 // it is preferred over the current primary.
-func (a *PrimaryArbiter) Acquire(id string) bool {
+func (a *PrimaryArbiter) Acquire(id string, height int64) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -94,11 +100,13 @@ func (a *PrimaryArbiter) Acquire(id string) bool {
 	switch {
 	case a.primary == id:
 		a.lastReq = now
+		a.grant(height)
 		return true
 
 	case a.primary == "":
 		a.primary = id
 		a.lastReq = now
+		a.grant(height)
 		a.logger.Info("consensus primary signer elected", "primary", id)
 		return true
 
@@ -106,13 +114,23 @@ func (a *PrimaryArbiter) Acquire(id string) bool {
 		prev := a.primary
 		a.primary = id
 		a.lastReq = now
+		a.grant(height)
 		a.logger.Info("consensus primary signer failed over", "from", prev, "to", id, "after_idle", a.timeout.String())
 		return true
+
+	// Fail back only once the preferred node has caught up. Taking the role back
+	// while it is behind means every request until it catches up is refused by the
+	// height-regression check, which costs exactly those blocks.
+	case a.outranks(id) && height < a.maxHeight:
+		a.logger.Info("consensus primary fail-back deferred, preferred node still behind",
+			"preferred", id, "height", height, "signed_through", a.maxHeight, "primary", a.primary)
+		return false
 
 	case a.outranks(id):
 		prev := a.primary
 		a.primary = id
 		a.lastReq = now
+		a.grant(height)
 		a.logger.Info("consensus primary signer failed back to preferred node", "from", prev, "to", id)
 		return true
 
@@ -136,6 +154,13 @@ func (a *PrimaryArbiter) Release(id string) bool {
 		a.primary = ""
 		a.lastReq = time.Time{}
 		return true
+	}
+}
+
+// grant records the height of a request the arbiter just allowed. Callers hold a.mu.
+func (a *PrimaryArbiter) grant(height int64) {
+	if height > a.maxHeight {
+		a.maxHeight = height
 	}
 }
 
